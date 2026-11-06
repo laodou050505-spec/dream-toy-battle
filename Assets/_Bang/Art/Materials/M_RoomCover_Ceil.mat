@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_RoomCover_Ceil
+  m_Shader: {fileID: 4800000, guid: 3f45f37509dde4750868a1d25c070618, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: 2050
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _GroundTex:
+        m_Texture: {fileID: 2800000, guid: a4703e6da3614459bb72825990fcf2fe, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Pano:
+        m_Texture: {fileID: 2800000, guid: 11eb54c1b85a445f3856057483649989, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _DstBlend: 10
+    - _DstBlendA: 0
+    - _EdgeWidth: 0.38
+    - _NoiseAmp: 0.32
+    - _NoiseScale: 2.4
+    - _PanoElevMax: 55
+    - _PanoElevMin: -28
+    - _PanoRepeat: 2
+    - _PanoYaw: 0
+    - _RimStrength: 0.22
+    - _RoomMode: 1
+    - _SrcBlend: 5
+    - _SrcBlendA: 1
+    - _StencilComp: 3
+    - _StencilRef: 0
+    - _ZTest: 4
+    - _ZWrite: 1
+    m_Colors:
+    - _BaseColor: {r: 0.97, g: 0.95, b: 0.93, a: 1}
+    - _GroundColor: {r: 0.8, g: 1, b: 0.94, a: 1}
+    - _PanoTint: {r: 1, g: 1, b: 1, a: 1}
+    - _RimColor: {r: 1, g: 0.86, b: 0.96, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

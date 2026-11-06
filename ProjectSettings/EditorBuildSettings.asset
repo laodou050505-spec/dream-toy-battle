@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/_Bang/Scenes/Main.unity
+    guid: ef573edf432454c7a8d5ca057ab752f5
+  - enabled: 1
+    path: Assets/_Bang/Scenes/World_W1.unity
+    guid: 3f1c2f457a1ec4d21806fb17adfc84a2
+  - enabled: 1
+    path: Assets/_Bang/Scenes/World_W2.unity
+    guid: afbf756b58a6242b681466b0069e17cf
+  - enabled: 1
+    path: Assets/_Bang/Scenes/World_W3.unity
+    guid: 5bcb88ccba0c1403eb1a0c0457d76b52
+  - enabled: 1
+    path: Assets/_Bang/Scenes/World_W4.unity
+    guid: 8399afe47338446eea11afda55ba943c
+  - enabled: 1
+    path: Assets/_Bang/Scenes/World_W5.unity
+    guid: 98516c54cf86b4728aa9548562797b26
+  - enabled: 1
+    path: Assets/_Bang/Scenes/World_W6.unity
+    guid: a6331bd9342d048c78b35676184cafa0
+  m_configObjects:
+    ByteDance.PICO.XR.Settings: {fileID: 11400000, guid: d201489b422af4327ae5497186269deb, type: 2}
+    com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 9e14ddbbfbe964e13bbff86f7aa717bd, type: 2}

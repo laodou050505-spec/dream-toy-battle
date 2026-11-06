@@ -1,0 +1,37 @@
+{
+ "Portal_Bricks": {
+  "faces": 10782,
+  "boundary": 0,
+  "nonmanifold": 0
+ },
+ "Portal_Rim": {
+  "faces": 520,
+  "boundary": 0,
+  "nonmanifold": 0
+ },
+ "Portal_Debris": {
+  "faces": 624,
+  "boundary": 0,
+  "nonmanifold": 0
+ },
+ "W1_Track": {
+  "faces": 2240,
+  "boundary": 0,
+  "nonmanifold": 0
+ },
+ "W1_BrickPath": {
+  "faces": 2772,
+  "boundary": 0,
+  "nonmanifold": 0
+ },
+ "W1_Rainbow": {
+  "faces": 3600,
+  "boundary": 0,
+  "nonmanifold": 0
+ },
+ "W1_Ground": {
+  "faces": 2953,
+  "boundary": 0,
+  "nonmanifold": 0
+ }
+}
