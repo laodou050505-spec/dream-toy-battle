@@ -678,7 +678,24 @@ namespace Bang.Logic
             p.far = V.sub(p.@base, V.scale(n, P.commanderBehind));
         }
 
-        public double PortalSide(Portal p, Vec3d pos) => V.dot(V.sub(pos, p.@base), p.normal);
+        // 性能：以下几个门相关判断每帧被“敌人 × 障碍 × 推开轮次”调用上千次，原来每次都 new 临时 Vec3d（满场每帧 50KB+ 垃圾，引发 GC 卡顿）。
+        // 改成纯标量运算，运算顺序和原来 V.dot(V.sub(...)) 完全一致，结果逐位相同。
+        public double PortalSide(Portal p, Vec3d pos) => PortalSide(p, pos.x, pos.y, pos.z);
+        double PortalSide(Portal p, double x, double y, double z) { var b = p.@base; var n = p.normal; return (x - b.x) * n.x + (y - b.y) * n.y + (z - b.z) * n.z; }
+        double PortalLat(Portal p, double x, double y, double z) { var b = p.@base; var r = p.right; return (x - b.x) * r.x + (y - b.y) * r.y + (z - b.z) * r.z; }
+        /// <summary>origin→pos 这条线段和门面的交点（门面局部：横向 lx、世界高度 hy、世界 hx/hz）；不相交返回 false。</summary>
+        bool HitWall(Portal p, Vec3d origin, Vec3d pos, out double hx, out double hy, out double hz)
+        {
+            hx = hy = hz = 0;
+            var n = p.normal; var b = p.@base;
+            double dx = pos.x - origin.x, dy = pos.y - origin.y, dz = pos.z - origin.z;
+            double den = dx * n.x + dy * n.y + dz * n.z;
+            if (Math.Abs(den) < 1e-6) return false;
+            double t = ((b.x - origin.x) * n.x + (b.y - origin.y) * n.y + (b.z - origin.z) * n.z) / den;
+            if (t < 0 || t > 1) return false;
+            hx = origin.x + dx * t; hy = origin.y + dy * t; hz = origin.z + dz * t;
+            return true;
+        }
 
         /// <summary>门口已玩具化（墙面透出门后世界）的半径（米，表现层每帧给）：视线穿过门所在墙面、落在门口这一圈里，也算看得见。</summary>
         public double revealRadius;
@@ -687,26 +704,17 @@ namespace Bang.Logic
         {
             if (ThroughPortal(p, origin, pos)) return true;
             if (revealRadius < 0.3) return false;
-            Vec3d d = V.sub(pos, origin);
-            double den = V.dot(d, p.normal);
-            if (Math.Abs(den) < 1e-6) return false;
-            double t = V.dot(V.sub(p.@base, origin), p.normal) / den;
-            if (t < 0 || t > 1) return false;
-            Vec3d h = V.add(origin, V.scale(d, t));
-            return V.len(V.sub(h, p.center)) <= revealRadius * 0.8;      // 覆盖边缘是软的、有舌头：只认里面八成
+            if (!HitWall(p, origin, pos, out double hx, out double hy, out double hz)) return false;
+            var c = p.center; double ex = hx - c.x, ey = hy - c.y, ez = hz - c.z;
+            return Math.Sqrt(ex * ex + ey * ey + ez * ez) <= revealRadius * 0.8;      // 覆盖边缘是软的、有舌头：只认里面八成
         }
 
         public bool ThroughPortal(Portal p, Vec3d origin, Vec3d pos)
         {
-            Vec3d d = V.sub(pos, origin);
-            double den = V.dot(d, p.normal);
-            if (Math.Abs(den) < 1e-6) return false;
-            double t = V.dot(V.sub(p.@base, origin), p.normal) / den;
-            if (t < 0 || t > 1) return false;
-            Vec3d h = V.add(origin, V.scale(d, t));
-            double lx = V.dot(V.sub(h, p.@base), p.right);
-            if (p.holeX != null && p.holeX.Length >= 3) return InPoly(p.holeX, p.holeY, lx, h.y);
-            return Math.Abs(lx) <= p.w / 2 && h.y >= 0 && h.y <= p.h;
+            if (!HitWall(p, origin, pos, out double hx, out double hy, out double hz)) return false;
+            double lx = PortalLat(p, hx, hy, hz);
+            if (p.holeX != null && p.holeX.Length >= 3) return InPoly(p.holeX, p.holeY, lx, hy);
+            return Math.Abs(lx) <= p.w / 2 && hy >= 0 && hy <= p.h;
         }
 
         static bool InPoly(double[] xs, double[] ys, double x, double y)
@@ -736,15 +744,17 @@ namespace Bang.Logic
             if (side >= e.radius + 0.05 || e.pos.y > p.h + 0.3) return true;   // 已经整个出了门墙（飞在门顶以上的也在房间里）
             double y0 = e.pos.y, h = Math.Max(0.1, e.height);
             var r = p.right; double rr = e.radius * 0.8;
+            var q = _visQ;
             foreach (var (dl, dy) in VisPts)
             {
-                var q = new Vec3d(e.pos.x + r.x * dl * rr, y0 + h * dy, e.pos.z + r.z * dl * rr);
+                q.x = e.pos.x + r.x * dl * rr; q.y = y0 + h * dy; q.z = e.pos.z + r.z * dl * rr;
                 if (PortalSide(p, q) >= 0 || SeenBehind(p, eye, q)) return true;   // 在门面这一侧的点：视线不穿门面，直接看得见
             }
             return false;
         }
         /// <summary>门后某个点（机关、礼盒、积木球）此刻看不看得见：在房间这一侧，或视线穿过门洞 / 门口玩具化的墙。</summary>
         public bool CanSeePoint(Portal p, Vec3d pos) => p == null || PortalSide(p, pos) >= 0 || SeenBehind(p, head.pos, pos);
+        readonly Vec3d _visQ = new Vec3d();                                  // CanSee 的取样点（复用，不每次 new；只在本函数内用）
         static readonly (double dl, double dy)[] VisPts = { (0, 0.5), (0, 0.9), (0, 0.15), (-1, 0.5), (1, 0.5) };
 
         // ───────────────────────── 开局 ─────────────────────────
@@ -1137,6 +1147,8 @@ namespace Bang.Logic
         }
 
         // ───────────────────────── 每帧 ─────────────────────────
+        /// <summary>性能剖析钩子：Update 里每个子步骤结束时调一次（参数 = 步骤号）。平时为空，零开销；编辑器剖析脚本挂上去计时 / 统计分配。</summary>
+        public static System.Action<int> Probe;
         public void Update(double dt, FrameInput input = null)
         {
             dt = Math.Min(dt, 0.1);
@@ -1161,34 +1173,37 @@ namespace Bang.Logic
                 HandleMenuHands(handInput);
                 return;
             }
-            UpdateShieldAndBinoc(dt, handInput);
-            UpdateGaze(dt, gazeInput);
-            UpdateWeapons(dt, handInput);
+            Probe?.Invoke(0);
+            UpdateShieldAndBinoc(dt, handInput); Probe?.Invoke(1);
+            UpdateGaze(dt, gazeInput); Probe?.Invoke(2);
+            UpdateWeapons(dt, handInput); Probe?.Invoke(3);
             if (phase == "lost" || phase == "clear") {
                 UpdateFlags(dt);
                 UpdatePhase(dt);
                 return;
             }
-            UpdateSpawns(dt);
-            UpdateMechanics(dt);
+            UpdateSpawns(dt); Probe?.Invoke(4);
+            UpdateMechanics(dt); Probe?.Invoke(5);
             // 注意：用索引循环，AI 可能在迭代中添加新元素（如指挥官召唤跟班、气球分裂）
             for (int i = 0; i < enemies.Count; i++) {
                 var e = enemies[i];
                 if (!e.dead) { UpdateEnemy(e, dt); TrackStuck(e, dt); AvoidObstacles(e); }      // 不管哪种走法（滑出门、跳、冲、被击退），最后都不许留在房间实物里
             }
-            SeparateEnemies();
+            Probe?.Invoke(6);
+            SeparateEnemies(); Probe?.Invoke(7);
             foreach (var e in enemies) if (!e.dead && e.k.move != "fly") AvoidObstacles(e);
-            if (worldBox != null) foreach (var e in enemies) if (!e.dead) { var q = InBox(e.pos, BodyR(e) + 0.05); e.pos.x = q.x; e.pos.z = q.z; }   // 飞的也不出门后世界的墙   // 推开以后再避一次障：不许被同伴挤进房间实物里
-            enemies.RemoveAll(e => e.dead);
-            UpdateBullets(dt);
-            UpdateFlags(dt);
+            if (worldBox is (double bx0, double bx1, double bz0, double bz1))   // 原地夹紧（不 new）
+                foreach (var e in enemies) if (!e.dead) { double rr = BodyR(e) + 0.05; e.pos.x = Math.Max(bx0 + rr, Math.Min(bx1 - rr, e.pos.x)); e.pos.z = Math.Max(bz0 + rr, Math.Min(bz1 - rr, e.pos.z)); }   // 飞的也不出门后世界的墙   // 推开以后再避一次障：不许被同伴挤进房间实物里
+            enemies.RemoveAll(e => e.dead); Probe?.Invoke(8);
+            UpdateBullets(dt); Probe?.Invoke(9);
+            UpdateFlags(dt); Probe?.Invoke(10);
             var keysToRemove = new List<int>();
             foreach (var kv in marks) if (time > kv.Value) keysToRemove.Add(kv.Key);
             foreach (var k in keysToRemove) marks.Remove(k);
             if (knockT > 0) knockT -= dt;
             if (_knockGrace > 0) _knockGrace -= dt;
             if (lesson != null) UpdateLesson(dt);
-            UpdatePhase(dt);
+            UpdatePhase(dt); Probe?.Invoke(11);
         }
 
         private void HandleMenuHands(Hands hands)
@@ -2126,10 +2141,9 @@ namespace Bang.Logic
         public bool InDoorLane(Portal p, (double x, double z, double r) o)
         {
             if (p == null) return false;
-            var c = new Vec3d(o.x, 0, o.z);
-            double side = PortalSide(p, c);
+            double side = PortalSide(p, o.x, 0, o.z);
             if (side < -LaneBack - o.r || side > 0.45 + o.r) return false;   // 门外只算门槛这一小段（再往外是房间，正常绕开实物）
-            LaneLat(p, out var lo, out var hi); double lat = V.dot(V.sub(c, p.@base), p.right);
+            LaneLat(p, out var lo, out var hi); double lat = PortalLat(p, o.x, 0, o.z);
             return lat > lo - o.r && lat < hi + o.r;
         }
         /// <summary>小怪正走在门的进出通道里。</summary>
@@ -2138,7 +2152,7 @@ namespace Bang.Logic
             var p = e.portal; if (p == null) return false;
             double side = PortalSide(p, e.pos);
             if (side < -LaneBack || side > 0.9) return false;
-            LaneLat(p, out var lo, out var hi); double lat = V.dot(V.sub(e.pos, p.@base), p.right);
+            LaneLat(p, out var lo, out var hi); double lat = PortalLat(p, e.pos.x, e.pos.y, e.pos.z);
             return lat > lo - 0.3 && lat < hi + 0.3;
         }
 

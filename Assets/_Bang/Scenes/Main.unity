@@ -1738,6 +1738,7 @@ MonoBehaviour:
   - {fileID: 3400534730092679257, guid: 07fa6599788b141549c79ca6edfbfdc4, type: 3}
   - {fileID: 3637659896027134594, guid: 6ef88695a0cab485fa982fefac4c579a, type: 3}
   - {fileID: 2170897261784676326, guid: b0989c6d14cd6429cb23774b9e10397e, type: 3}
+  enemyGunMesh: {fileID: 4300000, guid: 39decd2a0c9e7436ca7c12d0d4132bb8, type: 2}
   brickPrefab: {fileID: 3891889609952558377, guid: f82db74211016433484b64d84d7b39aa, type: 3}
   ringMat: {fileID: 2100000, guid: daef5c40f5fb74fc494ca1efa87d0c61, type: 2}
   lockMat: {fileID: 2100000, guid: 7025274f75cbd4a3a86fcc6c87a2d0f7, type: 2}
@@ -1753,6 +1754,7 @@ MonoBehaviour:
   outlineMat: {fileID: 2100000, guid: 965119a3e6b134ddb82a002586cbb7e5, type: 2}
   offscreen: {fileID: 320644053}
   music: {fileID: 279262421}
+  finaleLength: 13
   toyBaseRadius: 1.4
   waveLeak: 0.3
   doorRadiusMin: 0.35

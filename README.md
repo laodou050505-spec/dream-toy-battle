@@ -4,10 +4,10 @@ PICO 头显上的混合现实（MR）手势射击游戏。真实房间的墙上�
 
 ## 下载安装包（直接玩）
 
-不需要装 Unity。到 [Releases](https://github.com/laodou050505-spec/dream-toy-battle/releases/latest) 下载 `DreamToyBattle_v0.3.1108.apk`（410 MB），然后：
+不需要装 Unity。到 [Releases](https://github.com/laodou050505-spec/dream-toy-battle/releases/latest) 下载 `DreamToyBattle_v0.3.1109.apk`（410 MB），然后：
 
 1. PICO 头显开启开发者模式，用 USB 线连接电脑。
-2. 运行 `adb install -r DreamToyBattle_v0.3.1108.apk`。
+2. 运行 `adb install -r DreamToyBattle_v0.3.1109.apk`。
 3. 在头显的应用列表里打开「梦境玩具战」。
 
 ## 玩法

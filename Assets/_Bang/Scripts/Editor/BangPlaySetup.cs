@@ -143,6 +143,7 @@ namespace Bang.EditorTools
             gd.jackPrefab = P("Enemy_Jack"); gd.planePrefab = P("Enemy_Plane"); gd.balloonPrefab = P("Enemy_Balloon"); gd.carPrefab = P("Enemy_Car"); gd.botPrefab = P("Enemy_Bot");
             gd.bossPrefabs = new GameObject[6]; for (int i = 0; i < 6; i++) gd.bossPrefabs[i] = P("Enemy_Boss" + (i + 1)); gd.brickPrefab = P("BlockBall");
             gd.flagSmallPrefab = P("Flag_Small"); gd.flagBigPrefab = P("Flag_Big"); gd.gunPrefab = P("ToyEagle"); gd.rifleModel = P("ToyRifle");
+            gd.enemyGunMesh = AssetDatabase.LoadAssetAtPath<Mesh>("Assets/_Bang/Art/Models/Proc/Gun/Gun_Enemy.asset");   // 射手手里的低模枪（玩家那把 3.7 万面，敌人手上只有几厘米：用 2000 面的减面版）
             gd.targetPrefab = P("Target_Balloon"); gd.dartPrefab = P("Dart_Foam"); gd.shieldPrefab = P("ToyShield");
             gd.music = mu;
             gd.outlineMat = BangArt.Mat("M_ToyOutline", m => { m.SetColor("_OutlineColor", new Color(0.33f, 0.2f, 0.42f, 1)); m.SetFloat("_Width", 0.0035f); }, Shader.Find("Bang/ToyOutline"));

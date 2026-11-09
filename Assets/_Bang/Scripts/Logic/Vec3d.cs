@@ -44,14 +44,18 @@ namespace Bang.Logic
             a.z + (b.z - a.z) * t
         );
         // 两个方向的夹角（度）
-        public static double angleDeg(Vec3d a, Vec3d b)
+        public static double angleDeg(Vec3d a, Vec3d b) => angleDeg(a.x, a.y, a.z, b.x, b.y, b.z);
+        // 标量版（瞄准每帧对每个目标调用：不建临时 Vec3d；归一化、点乘顺序与原来 dot(norm(a), norm(b)) 一致）
+        public static double angleDeg(double ax, double ay, double az, double bx, double by, double bz)
         {
-            double c = dot(norm(a), norm(b));
+            double la = System.Math.Sqrt(ax * ax + ay * ay + az * az); if (la < 1e-12) la = 1;
+            double lb = System.Math.Sqrt(bx * bx + by * by + bz * bz); if (lb < 1e-12) lb = 1;
+            double c = (ax / la) * (bx / lb) + (ay / la) * (by / lb) + (az / la) * (bz / lb);
             c = c < -1 ? -1 : c > 1 ? 1 : c;
             return System.Math.Acos(c) / DEG;
         }
         // 点到射线的夹角（度）：从 origin 看 p 与 dir 的偏离
-        public static double angleTo(Vec3d origin, Vec3d dir, Vec3d p) => angleDeg(dir, sub(p, origin));
+        public static double angleTo(Vec3d origin, Vec3d dir, Vec3d p) => angleDeg(dir.x, dir.y, dir.z, p.x - origin.x, p.y - origin.y, p.z - origin.z);
         public static double clamp(double x, double a, double b) => x < a ? a : x > b ? b : x;
         // 绕 Y 轴旋转（弧度）
         public static Vec3d rotY(Vec3d a, double r)

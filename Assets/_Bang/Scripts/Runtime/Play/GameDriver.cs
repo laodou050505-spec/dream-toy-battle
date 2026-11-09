@@ -29,6 +29,7 @@ namespace Bang.Play
         public GameObject planterPrefab, brutePrefab, mousePrefab, trooperPrefab, tinPrefab, minionPrefab, commanderPrefab, ninjaPrefab, jackPrefab, planePrefab, balloonPrefab, carPrefab, botPrefab, flagSmallPrefab, flagBigPrefab, gunPrefab, rifleModel, targetPrefab, dartPrefab, shieldPrefab;
         [Header("表现")]
         [Tooltip("章末 Boss（下标 0 = 第 1 章）")] public GameObject[] bossPrefabs;
+        [Tooltip("射手手里的玩具枪（玩家手枪五个零件合成一个、减面到约 2000 三角形，顶点色不变）。为空时退回复制玩家那把（3.7 万面）")] public Mesh enemyGunMesh;
         [Tooltip("Boss 扔出的积木砖 / 炮弹")] public GameObject brickPrefab;
         public Material ringMat, lockMat, blobMat;
         [Tooltip("视线锁定准星（糖果角括号）和它的光晕")] public Material reticleMat, reticleGlowMat; public Texture reticleGlowTex;
@@ -90,6 +91,7 @@ namespace Bang.Play
             if (reticleMat) _lock = LockReticle.Create(transform, reticleMat, reticleGlowMat, reticleGlowTex);
             if (shieldPrefab) _shield = ShieldView.Create(shieldPrefab, transform);
             if (badges) { EnemyView.FrostIcon = badges.freeze; EnemyView.IconMat = badges.iconMat; }
+            _perf = gameObject.AddComponent<PerfLog>(); _perf.driver = this;   // 真机性能记录（logcat [BangPerf] + 每波写进游玩记录）
             EnemyView.OutlineMat = outlineMat;
             if (ui && ui.theme) EnemyView.SparkleMat = ui.theme.sparkleMat;
             RoomToyification.Instance?.ClearAll(); _doorSeeds.Clear(); _doorSeedKey = -1;
@@ -224,6 +226,7 @@ namespace Bang.Play
         }
 
         bool _epilogueShown;
+        PerfLog _perf;
         public void StartChapter(int ch)
         {
             _epilogueShown = false;
@@ -392,26 +395,29 @@ namespace Bang.Play
             RoomToyification.Instance?.ClearAll(); _doorSeeds.Clear(); _doorSeedKey = -1;
         }
 
+        // 性能分析标记（Profiler 里按名字看每一步花多少时间；正式包里开销可忽略）
+        static readonly Unity.Profiling.ProfilerMarker PmLogic = new("Bang.Logic"), PmEnemies = new("Bang.SyncEnemies"), PmFlags = new("Bang.SyncFlags"),
+            PmFx = new("Bang.Dispatch"), PmToy = new("Bang.SyncToy"), PmUi = new("Bang.UiTick"), PmLock = new("Bang.SyncLock"), PmHints = new("Bang.Offscreen");
         void Update()
         {
             if (Game == null || !input) return;
             float dt = Mathf.Min(Time.deltaTime, 0.1f);
             HandleKeys();
             var frame = input.Poll(dt);
-            bool consumed = ui && ui.Tick(frame, input.GazeWorld, dt);
+            bool consumed; using (PmUi.Auto()) consumed = ui && ui.Tick(frame, input.GazeWorld, dt);
             if (consumed && frame.hands != null) { if (frame.hands.left != null) frame.hands.left.events = new List<HandEvent>(); if (frame.hands.right != null) frame.hands.right.events = new List<HandEvent>(); }
             if (!(ui && ui.Paused))
             {
                 ToyTime.Tick();
                 float tdt = dt * ToyTime.Scale;                                  // 慢动作只放慢玩具，枪和手照常
-                Game.Update(tdt, frame);
-                SyncEnemies(tdt);
-                SyncFlags(tdt);
+                using (PmLogic.Auto()) Game.Update(tdt, frame);
+                using (PmEnemies.Auto()) SyncEnemies(tdt);
+                using (PmFlags.Auto()) SyncFlags(tdt);
                 SyncBullets();
                 mech?.Sync(tdt);
-                foreach (var e in Game.DrainFx()) Dispatch(e);   // 先分发事件（死亡要用到还在的视图），再清掉规则层已移除的
+                using (PmFx.Auto()) foreach (var e in Game.DrainFx()) Dispatch(e);   // 先分发事件（死亡要用到还在的视图），再清掉规则层已移除的
                 Cleanup();
-                SyncToy(dt);
+                using (PmToy.Auto()) SyncToy(dt);
                 SyncMood(dt);
             }
             foreach (var kv in _guns)
@@ -421,11 +427,11 @@ namespace Bang.Play
                 kv.Value.Pose(has, p, r, dt);
                 kv.Value.Sync(Game.weapons.Get(kv.Key), Game);
             }
-            SyncLock();
+            using (PmLock.Auto()) SyncLock();
             if (_shield) _shield.Sync(Game.shield, Game.ShieldMax(), dt);
             SyncBuffs(dt);
             SyncMusic(dt);
-            SyncOffscreen(dt);
+            using (PmHints.Auto()) SyncOffscreen(dt);
         }
 
         // ───────── 增益徽章 / 自适应音乐 ─────────
@@ -556,7 +562,7 @@ namespace Bang.Play
         {
             var st = Game.run.stats;
             Telemetry.Log(evt, chapter, wave, Time.time - _waveStartT, st.shots - _waveShots0, st.hits - _waveHits0, st.kills - _waveKills0, _headHits, (float)Game.toy,
-                $",\"seated\":{(Game.seated ? 1 : 0)},\"sens\":{PlayerPrefs.GetInt("bang.sens", 1)}");
+                $",\"seated\":{(Game.seated ? 1 : 0)},\"sens\":{PlayerPrefs.GetInt("bang.sens", 1)}" + (_perf ? _perf.WaveExtra() : ""));
         }
 
         /// <summary>开章时说清楚三星的条件（原来只有结算才知道差在哪）。</summary>
@@ -628,14 +634,26 @@ namespace Bang.Play
         /// <summary>给射手右手塞一把小号糖果玩具枪（就是玩家那把，缩小）：枪口顺着手臂往外（手垂着时朝下，举枪瞄准时朝前）。在 EnemyView.Init 之前挂上，门后材质切换会一起处理。</summary>
         void GiveToyGun(GameObject enemy)
         {
-            var rig = enemy.GetComponent<EnemyRig>(); if (!rig || !rig.armR || !gunPrefab) return;
+            var rig = enemy.GetComponent<EnemyRig>(); if (!rig || !rig.armR || (!gunPrefab && !enemyGunMesh)) return;
             var rs = rig.armR.GetComponentsInChildren<Renderer>(); if (rs.Length == 0) return;
             var b = rs[0].bounds; foreach (var r in rs) b.Encapsulate(r.bounds);
-            var gun = Instantiate(gunPrefab, rig.armR); gun.name = "EnemyGun";
-            foreach (var mb in gun.GetComponentsInChildren<MonoBehaviour>(true)) mb.enabled = false;
-            foreach (var c in gun.GetComponentsInChildren<Collider>(true)) Destroy(c);
             var armMat = rs[0].sharedMaterial;                                          // 玩家那把是半透明的，敌人的换成手臂同款不透明顶点色材质（描边也能套上）
-            foreach (var r in gun.GetComponentsInChildren<Renderer>(true)) r.sharedMaterial = armMat;
+            GameObject gun;
+            if (enemyGunMesh)
+            {
+                // 性能（用户：终极决战小怪一多就卡）：原来复制玩家那把精细手枪（5 个零件 3.7 万三角形，加描边每个射手多画 7.4 万面、多 10 次绘制）。
+                // 换成合成一体、减面到 2000 的同款（网格坐标就是玩家枪根坐标系，摆放代码不用改）
+                gun = new GameObject("EnemyGun"); gun.transform.SetParent(rig.armR, false);
+                gun.AddComponent<MeshFilter>().sharedMesh = enemyGunMesh;
+                var mr = gun.AddComponent<MeshRenderer>(); mr.sharedMaterial = armMat; mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            else
+            {
+                gun = Instantiate(gunPrefab, rig.armR); gun.name = "EnemyGun";
+                foreach (var mb in gun.GetComponentsInChildren<MonoBehaviour>(true)) mb.enabled = false;
+                foreach (var c in gun.GetComponentsInChildren<Collider>(true)) Destroy(c);
+                foreach (var r in gun.GetComponentsInChildren<Renderer>(true)) r.sharedMaterial = armMat;
+            }
             rig.holdAim = 0.45f;
             var down = -rig.armR.up;                                                    // 手臂顺着本地 −Y 往下
             var hand = b.center + down * b.extents.y * 0.85f;                           // 手的位置：手臂末端
@@ -855,6 +873,7 @@ namespace Bang.Play
                 case LessonDoneFx: UiManager.MarkKnowsGun(); ui?.LessonDone(); ui?.Banner(Loc.T("教学完成！", "Tutorial Complete!"), Loc.T("玩具们要来了", "Here come the toys"), 2.5f); BangAudio.Ui("wave_clear"); break;
                 case WaveStartFx w:
                     if (w.wave > 0) LogWave("waveEnd", w.wave - 1);
+                    if (_perf && w.wave == 0) _perf.ResetWave();
                     _waveStartT = Time.time; _headHits = 0; _waveShots0 = Game.run.stats.shots; _waveHits0 = Game.run.stats.hits; _waveKills0 = Game.run.stats.kills;
                     if (w.wave == 0 && Game.run.mode == "chapter") StarGoalTip();
                     _waveKnocks = 0;
