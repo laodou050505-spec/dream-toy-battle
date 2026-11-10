@@ -97,6 +97,40 @@ namespace Bang.Play
             }
         }
         static Material _goldHull, _bossHull;
+        static Material BossHull
+        {
+            get
+            {
+                if (!_bossHull && OutlineMat) { _bossHull = new Material(OutlineMat); _bossHull.SetColor("_OutlineColor", new Color(1f, 0.7f, 0.12f, 1f)); _bossHull.SetFloat("_DepthPush", 0.16f); _bossHull.SetFloat("_Width", 0.011f); }
+                return _bossHull;
+            }
+        }
+
+        /// <summary>给没有 EnemyView 的 Boss 模型（终极决战谢幕里摆出来的 6 个）套上和打仗时一样的金色外轮廓描边（用户：最后 Boss 一起出来时要有个简单的描边，不然有点单调）。
+        /// 做法同 AddOutline：最低一级 LOD 做外壳挂在 LOD0 下；没有 LOD 的零件直接追加描边材质。也顺手关掉投影（和打仗时一致）。</summary>
+        public static void AddBossSilhouette(GameObject go)
+        {
+            var hullMat = BossHull; if (!hullMat) return;
+            foreach (var group in go.GetComponentsInChildren<LODGroup>(true))
+            {
+                var lods = group.GetLODs(); if (lods.Length == 0 || lods[0].renderers.Length == 0 || !lods[0].renderers[0]) continue;
+                var low = lods[Mathf.Min(2, lods.Length - 1)].renderers; if (low.Length == 0 || !low[0]) continue;
+                var mf = low[0].GetComponent<MeshFilter>(); if (!mf) continue;
+                var hull = new GameObject(OutlineHull); hull.transform.SetParent(lods[0].renderers[0].transform, false);
+                hull.transform.SetPositionAndRotation(low[0].transform.position, low[0].transform.rotation);
+                hull.transform.localScale = Vector3.one;
+                hull.AddComponent<MeshFilter>().sharedMesh = Smoothed(mf.sharedMesh);
+                var hr = hull.AddComponent<MeshRenderer>(); hr.sharedMaterial = hullMat; hr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            foreach (var r in go.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                var mats = r.sharedMaterials;
+                if (r.name == OutlineHull || r.GetComponentInParent<LODGroup>() || mats.Length == 0 || !mats[0] || mats[0].shader == null || mats[0].shader.name != "Bang/ToyLit" || !OutlineMat) continue;
+                var mf = r.GetComponent<MeshFilter>(); if (mf) mf.sharedMesh = Smoothed(mf.sharedMesh);
+                var nm = new Material[mats.Length + 1]; mats.CopyTo(nm, 0); nm[^1] = OutlineMat; r.sharedMaterials = nm;
+            }
+        }
         Material _baseHull;                                                   // 平时的外壳描边：普通小怪 = 深莓紫，Boss = 一圈粗金边
         float _hlT;
         /// <summary>金色描边闪几秒：第一次见到的新玩具、Boss 登场 / 换阶段时，让玩家一眼认出“说的就是它”。</summary>
@@ -111,7 +145,7 @@ namespace Bang.Play
         Transform _crownPivot, _crown, _halo; MeshRenderer _haloR; float _crownTop; static Texture2D _haloTex; static Material _crownMat, _gemMat;
         void AddBossDecor(Enemy e)
         {
-            if (!_bossHull && OutlineMat) { _bossHull = new Material(OutlineMat); _bossHull.SetColor("_OutlineColor", new Color(1f, 0.7f, 0.12f, 1f)); _bossHull.SetFloat("_DepthPush", 0.16f); _bossHull.SetFloat("_Width", 0.011f); }   // 描边沿视线往后推 16 cm：Boss 身上零件之间的线都藏到身体后面，只剩外轮廓一圈（用户：Boss 描边哪都有，显得乱）
+            var bh = BossHull;                                                  // 粗金边（只留外轮廓）
             if (_bossHull) { _baseHull = _bossHull; SetHullMat(_bossHull); }
             var src = Resources.Load<GameObject>("BossFx/BossCrown");
             if (!_crownMat) _crownMat = Resources.Load<Material>("BossFx/M_CrownVC");     // 金身：ToyLit._Metal 金属反射
@@ -347,6 +381,41 @@ namespace Bang.Play
             //（用户：敌人经过门框时模型缺一块）。现在跨门期间多画一份：门后材质只画门面后面，房间材质只画门面前面，两半在门面处严丝合缝
             float r = Mathf.Max((float)data.radius, BodyHalf());
             SetStraddle(_hasPortalMat && side > -r - 0.05f && side < r + 0.08f, p);
+            if (Game.IsBoss(data)) SqueezeThroughDoor(p, (float)side, r);
+        }
+
+        // ───── Boss 比门洞宽（积木巨人 1.5 米，门洞 1.3 米）：用户：Boss 会有一半在门后面 ─────
+        // 跨门时横向压扁到门洞宽度以内、稍微拉高一点（卡通“挤出来”），离开门面 0.4 米内弹回原样；比门洞窄的 Boss 不变
+        float _bossHalfW = -1f, _squeeze = 1f; Vector3 _scale0;
+        float BossHalfWidth()
+        {
+            if (_bossHalfW >= 0) return _bossHalfW;
+            float mx = 0f; var lg = GetComponentInChildren<LODGroup>();
+            var parts = new List<Renderer>();
+            if (lg && lg.GetLODs().Length > 0) parts.AddRange(lg.GetLODs()[0].renderers);
+            foreach (var mr in GetComponentsInChildren<MeshRenderer>()) if (!mr.GetComponentInParent<LODGroup>() && mr.GetComponent<MeshFilter>() && !mr.name.StartsWith("Boss") && mr.name != "Ring" && mr.name != "BlobShadow" && !mr.name.EndsWith("_Twin") && mr.name != OutlineHull) parts.Add(mr);
+            foreach (var pr in parts)
+            {
+                if (!pr) continue; var mf = pr.GetComponent<MeshFilter>(); if (!mf || !mf.sharedMesh) continue;
+                var bb = mf.sharedMesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    var c = bb.center + Vector3.Scale(bb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    var lp = transform.InverseTransformPoint(pr.transform.TransformPoint(c));
+                    mx = Mathf.Max(mx, Mathf.Abs(lp.x));
+                }
+            }
+            _bossHalfW = mx; _scale0 = transform.localScale; return _bossHalfW;
+        }
+        void SqueezeThroughDoor(Bang.Logic.Portal p, float side, float r)
+        {
+            float half = BossHalfWidth(); if (half <= 0.01f) return;
+            float fit = Mathf.Clamp01(((float)p.w * 0.5f - 0.06f) / half);
+            if (fit >= 0.999f && _squeeze >= 0.999f) return;                 // 比门洞窄：什么都不做
+            float t = Mathf.Clamp01(1f - (Mathf.Abs(side) - r) / 0.4f);       // 跨门 = 1，离门面 r+0.4 米以外 = 0
+            float want = Mathf.Lerp(1f, fit, t);
+            _squeeze = Mathf.MoveTowards(_squeeze, want, Time.deltaTime * 2.5f);
+            transform.localScale = new Vector3(_scale0.x * _squeeze, _scale0.y * (1f + (1f - _squeeze) * 0.3f), _scale0.z);
         }
 
         // ───── 跨门双份渲染 ─────

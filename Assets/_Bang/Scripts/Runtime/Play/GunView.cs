@@ -101,7 +101,7 @@ namespace Bang.Play
         void SyncRifle(Weapon w, Game g)
         {
             if (!_rifle || !_motion || !_motion.model) return;
-            bool on = g.rapidT > 0;
+            bool on = g.rapidT > 0 && g.knockT <= 0;   // 枪被 Boss 抢走 / 被打飞时长枪也收起（用户：Boss 把枪拿走了，长枪还在手里）；手枪播被抢的动画，回来后无限火力没结束就再弹出长枪
             _rifleShow = Mathf.MoveTowards(_rifleShow, on ? 1f : 0f, Time.deltaTime * 6f);
             bool show = on || _rifleShow > 0f;
             if (_rifle.gameObject.activeSelf != show) { _rifle.gameObject.SetActive(show); _motion.model.gameObject.SetActive(!show); PlayFx.Instance?.Glitter(transform.position, new Color(1f, 0.8f, 0.5f), 10, 0.3f); }

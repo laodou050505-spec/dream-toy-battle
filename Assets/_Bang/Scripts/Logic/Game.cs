@@ -948,13 +948,17 @@ namespace Bang.Logic
                 portal = kind.StartsWith("boss") ? BossDoor(portal) : FreeDoor(portal);
             string elite = opts.eliteOverride; // null = 不强制
             bool eliteExplicit = opts.eliteExplicit;
+            bool isBoss = kind.StartsWith("boss");
+            // Boss 不参与精英词条（用户：坦克 Boss 身上有残影、血量各自独立，连本体一共三个——是抽到了“成群”，一次生成 3 只叠在一起）。
+            // Boss 的血量 / 速度 / 招式是单独调的，金身、迅捷也不给。随机数照样消耗一次，后面的出怪顺序不变
             if (!eliteExplicit && run.eliteChance > 0 &&
                 kind != "commander" && kind != "minion" && kind != "balloonSmall" &&
-                rng() < run.eliteChance)
+                rng() < run.eliteChance && !isBoss)
             {
                 int idx = (int)Math.Floor(rng() * ELITES.Keys.Count);
                 elite = ELITES.Keys[idx];
             }
+            if (isBoss) elite = null;                                    // 保险：外部强制指定也不给 Boss 词条
             if (elite == "swarm" && !opts.fromSwarm) {
                 var out0 = new List<Enemy>();
                 for (int ii = 0; ii < ELITES.swarm.copies; ii++) {
@@ -2087,6 +2091,7 @@ namespace Bang.Logic
                 LaneLat(p, out double la, out double lb);
                 double lat = V.dot(V.sub(e.pos, p.@base), p.right);
                 bool inHole = lat > la + e.radius * 0.5 && lat < lb - e.radius * 0.5;
+                if (e.k.ai == "boss" && e.state != "enter" && side >= 0) inHole = false;   // Boss 比门洞宽：打仗时正对门洞也要离墙一个身位（用户：Boss 会有一半在门后面）
                 if (!inHole)
                 {
                     if (side >= 0) { double push = keep - side; e.pos.x += p.normal.x * push; e.pos.z += p.normal.z * push; }   // 房间这一侧贴墙：推回墙前
@@ -2718,35 +2723,47 @@ namespace Bang.Logic
             return new Vec3d(t.pos.x, t.y0 + V.clamp(u, 0, t.y1 - t.y0), t.pos.z);
         }
 
+        // 选目标的共同规则（用户：补给箱在 Boss 前面，怎么也打不到）：
+        //   射线真的穿过了目标（偏离角 ≤ 目标角半径）= 打中它；同时穿过好几个时选离得最近的（前面的东西本来就挡住后面的），
+        //   原来只比“偏离角 − 角半径”，大块头 Boss 的角半径大、分数更低或打平时排在前面，前面的补给箱 / 小怪永远轮不到。
+        //   都没穿过：照旧按偏离角最小的吸附（辅助瞄准）。
         public static TargetInfo PickTarget(Vec3d origin, Vec3d dir, List<TargetInfo> targets, double marginDeg)
         {
-            TargetInfo best = null; double bestScore = double.PositiveInfinity;
+            TargetInfo best = null, hit = null; double bestScore = double.PositiveInfinity, hitD = double.PositiveInfinity;
             foreach (var t in targets) {
                 double d = V.dist(origin, t.pos);
                 if (d < 0.05) continue;
                 double ang = V.angleTo(origin, dir, AimPoint(origin, dir, t));
                 double angR = Math.Atan(t.radius / d) / V.DEG;
                 double score = ang - angR;
-                if (score <= marginDeg && score < bestScore) { best = t; bestScore = score; }
+                if (score > marginDeg) continue;
+                if (score <= 0) { if (d < hitD) { hit = t; hitD = d; } }
+                else if (score < bestScore) { best = t; bestScore = score; }
             }
-            return best;
+            return hit ?? best;
         }
 
-        /// <summary>沿枪口找目标：按“偏离角 − 目标角半径”打分，旗子额外加罚分（同样偏离时先打敌人），机关类目标同敌人。</summary>
+        /// <summary>沿枪口找目标：射线穿过的非旗子目标里选最近的；否则按“偏离角 − 目标角半径”打分，旗子额外加罚分（同样偏离时先打敌人）。</summary>
         public static TargetInfo PickAimTarget(Vec3d origin, Vec3d dir, List<TargetInfo> targets, double marginDeg, double flagPenalty)
         {
-            TargetInfo best = null; double bestScore = double.PositiveInfinity;
+            TargetInfo best = null, hit = null; double bestScore = double.PositiveInfinity, hitKey = double.PositiveInfinity;
             foreach (var t in targets) {
                 double d = V.dist(origin, t.pos);
                 if (d < 0.05) continue;
                 double ang = V.angleTo(origin, dir, AimPoint(origin, dir, t));
                 double angR = Math.Atan(t.radius / d) / V.DEG;
-                double score = Math.Max(0, ang - angR);
+                double raw = ang - angR;
+                if (raw <= 0 && t.type != "flag")                                 // 射线穿过的敌人 / 补给箱 / 机关：选最近的
+                {
+                    if (d < hitKey) { hit = t; hitKey = d; }
+                    continue;
+                }
+                double score = Math.Max(0, raw);                                  // 旗子照旧：同样对准时加罚分，敌人优先（眼动不准时别老打到旗上）
                 if (score > marginDeg) continue;
                 if (t.type == "flag") score += flagPenalty;
                 if (score < bestScore) { best = t; bestScore = score; }
             }
-            return best;
+            return hit ?? best;
         }
 
         public static double SegPointDist(Vec3d a, Vec3d b, Vec3d p)

@@ -915,6 +915,46 @@ namespace Bang.Logic.Tests
         }
 
         [Test]
+        public void GT47_BossNeverElite()
+        {
+            // 用户：坦克 Boss 身上有残影、血量各自独立，连本体一共三个——Boss 抽到了“成群”词条被复制成 3 只。Boss 一律不带词条
+            foreach (var bk in new[] { "boss1", "boss2", "boss3", "boss4", "boss5", "boss6" })
+            {
+                var g = WaveGame(4);
+                g.run.eliteChance = 1;
+                g.enemies.Clear();
+                var b = g.SpawnEnemy(bk);
+                Assert.AreEqual(1, g.enemies.Count(e => e.kind == bk), bk + " 只出 1 只");
+                Assert.IsNull(b.elite, bk + " 不带词条");
+                var b2 = g.SpawnEnemy(bk, new SpawnOpts { eliteOverride = "swarm", eliteExplicit = true });
+                Assert.AreEqual(2, g.enemies.Count(e => e.kind == bk), bk + " 强制成群也不复制");
+            }
+            // 普通敌人照旧会抽到词条
+            var g2 = WaveGame(4); g2.run.eliteChance = 1; g2.enemies.Clear();
+            for (int i = 0; i < 10; i++) g2.SpawnEnemy("brute");
+            Assert.IsTrue(g2.enemies.All(e => e.elite != null), "普通敌人 100% 精英");
+        }
+
+        [Test]
+        public void GT46_AimPicksNearestHitTarget()
+        {
+            // 用户：补给箱在 Boss 前面，怎么也打不到——射线同时穿过补给箱和 Boss 时打离得近的那个
+            var o = new Vec3d(0, 1.5, 0); var dir = V.norm(new Vec3d(0, -0.2, -1));
+            var boss = new TargetInfo { id = 1, type = "enemy", pos = new Vec3d(0, 0.9, -3.0), radius = 0.65 };
+            var gift = new TargetInfo { id = 2, type = "gift", pos = new Vec3d(0.05, 1.5 - 0.2 * 1.6, -1.6), radius = 0.2 };
+            var list = new List<TargetInfo> { boss, gift };
+            Assert.AreEqual(2, Game.PickAimTarget(o, dir, list, 6, 3)?.id, "枪口：前面的补给箱");
+            Assert.AreEqual(2, Game.PickTarget(o, dir, list, 6)?.id, "眼动：前面的补给箱");
+            // 补给箱不在射线上：照旧打 Boss
+            gift.pos = new Vec3d(1.2, 1.2, -1.6);
+            Assert.AreEqual(1, Game.PickAimTarget(o, dir, list, 6, 3)?.id);
+            // 旗子仍按原规则：正对旗子、旁边有敌人在吸附范围内时，敌人优先（眼动不准时别老打到旗上）
+            var flag = new TargetInfo { id = 3, type = "flag", pos = new Vec3d(0, 1.5 - 0.2 * 2.0, -2.0), radius = 0.16 };
+            var near = new TargetInfo { id = 4, type = "enemy", pos = new Vec3d(0.45, 1.1, -2.2), radius = 0.2 };
+            Assert.AreEqual(4, Game.PickAimTarget(o, dir, new List<TargetInfo> { flag, near }, 12, 8)?.id);
+        }
+
+        [Test]
         public void GT45_EndlessBossEveryFiveWaves()
         {
             // 用户：无尽模式每五波一个 Boss，Boss 之间有小怪潮；敌人更多、血量更厚

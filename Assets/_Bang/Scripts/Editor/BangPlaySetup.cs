@@ -209,8 +209,10 @@ namespace Bang.EditorTools
             var surf = BangArt.Mat("M_RoomCoverMR", m =>
             {
                 m.SetFloat("_RoomMode", 0);
-                m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.Zero); m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+                // 一遍算完覆盖度和边缘光晕（性能：原来 Surface / Rim 两个 Pass 各算一遍 Coverage）：颜色 += 光晕，alpha *= 覆盖度
+                m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One); m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
                 m.SetFloat("_SrcBlendA", (float)UnityEngine.Rendering.BlendMode.Zero); m.SetFloat("_DstBlendA", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                m.SetShaderPassEnabled("SRPDefaultUnlit", false);
                 m.SetFloat("_ZWrite", 0); m.SetFloat("_ZTest", (float)UnityEngine.Rendering.CompareFunction.Always);   // 现实表面不遮挡任何游戏内容
             }, Shader.Find("Bang/ToyCover"));
             var mask = BangArt.Mat("M_RoomCoverMask", m => m.renderQueue = 1980, Shader.Find("Bang/ToyCoverMask"));

@@ -59,6 +59,7 @@ namespace Bang.Play
                 var go = Instantiate(prefabs[i], transform);
                 foreach (var c in go.GetComponentsInChildren<Collider>()) Destroy(c);
                 foreach (var m in go.GetComponentsInChildren<MonoBehaviour>()) if (!(m is Motion.EnemyMotion)) m.enabled = false;
+                EnemyView.AddBossSilhouette(go);                                          // 和打仗时一样的金色外轮廓描边
                 go.transform.position = mouth; go.transform.localScale *= 0.8f;          // 小一号：六个排开不挤
                 _scale0.Add(go.transform.localScale); go.transform.localScale = Vector3.zero;   // 轮到它才从门口冒出来（之前不显示，不和同门的叠在一起）
                 var look = new Vector3(head.x, 0, head.z) - to; float yaw = Quaternion.LookRotation(look).eulerAngles.y;

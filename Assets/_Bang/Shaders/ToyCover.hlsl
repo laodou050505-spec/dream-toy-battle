@@ -12,7 +12,7 @@ float _ToySeedCount;
 float4 _ToyDoor;          // xyz = 门洞中心（贴墙），w = 从门口蔓延出去的半径（米）；w<=0 不启用
 float4 _ToyEye;           // xyz = 玩家眼睛（游戏空间固定站位），w = 虚拟罩子半径；w<=0 不投影
 float4 _ToyBurstA[12];    // 不规则扩张的“舌头”：xyz = 源（门口 / 种子）中心，w = 伸出长度（米）
-float4 _ToyBurstB[12];    //                     xyz = 方向 × 尖细度（模长越大越细）
+float4 _ToyBurstB[12];    //                     xyz = 方向 × 尖细度（模长越大越细），w = 来源当前半径
 float _ToyBurstCount, _ToyBurstMax;
 
 // 把一个点沿“从眼睛看过去的方向”投到与真实房间无关的虚拟罩子上：往下看落到地面（y=0），否则落到半径 w 的球面。
@@ -39,12 +39,23 @@ V vert(A v)
     return o;
 }
 float hash13(float3 p) { p = frac(p * 0.1031); p += dot(p, p.zyx + 31.32); return frac((p.x + p.y) * p.z); }
+// 值噪声。性能（用户：终极决战小怪一多就卡；真机实测覆盖层是最大的 GPU 开销——整圈覆盖壳铺满视野，每个像素要算 8 层噪声 × 3 遍）：
+// 晶格值预先烘进一张 64³ 的 3D 贴图（_ToyNoise3D，RoomToyification 启动时生成），一层噪声 = 1 次采样，代替 8 次哈希 + 7 次插值。
+// 采样点放在“晶格 + 平滑后的小数 + 半个像素”上，硬件三线性插值算出的正好是原来 f*f*(3-2f) 平滑插值的结果（晶格每 64 格重复一次，看不出来）。
+TEXTURE3D(_ToyNoise3D); SAMPLER(sampler_ToyNoise3D);
+float _ToyNoiseN;
 float vnoise(float3 p)
 {
     float3 i = floor(p), f = frac(p); f = f * f * (3 - 2 * f);
-    float n000 = hash13(i), n100 = hash13(i + float3(1, 0, 0)), n010 = hash13(i + float3(0, 1, 0)), n110 = hash13(i + float3(1, 1, 0));
-    float n001 = hash13(i + float3(0, 0, 1)), n101 = hash13(i + float3(1, 0, 1)), n011 = hash13(i + float3(0, 1, 1)), n111 = hash13(i + float3(1, 1, 1));
-    return lerp(lerp(lerp(n000, n100, f.x), lerp(n010, n110, f.x), f.y), lerp(lerp(n001, n101, f.x), lerp(n011, n111, f.x), f.y), f.z);
+    float r;
+    [branch] if (_ToyNoiseN > 0.5) r = SAMPLE_TEXTURE3D_LOD(_ToyNoise3D, sampler_ToyNoise3D, (i + f + 0.5) / _ToyNoiseN, 0).r;
+    else   // 查找表还没建（编辑器刚打开等）：退回原来的逐点哈希
+    {
+        float n000 = hash13(i), n100 = hash13(i + float3(1, 0, 0)), n010 = hash13(i + float3(0, 1, 0)), n110 = hash13(i + float3(1, 1, 0));
+        float n001 = hash13(i + float3(0, 0, 1)), n101 = hash13(i + float3(1, 0, 1)), n011 = hash13(i + float3(0, 1, 1)), n111 = hash13(i + float3(1, 1, 1));
+        r = lerp(lerp(lerp(n000, n100, f.x), lerp(n010, n110, f.x), f.y), lerp(lerp(n001, n101, f.x), lerp(n011, n111, f.x), f.y), f.z);
+    }
+    return r;
 }
 float fbm(float3 p) { return vnoise(p) * 0.55 + vnoise(p * 2.07 + 7.1) * 0.28 + vnoise(p * 4.13 + 3.7) * 0.17; }
 
@@ -111,9 +122,7 @@ float Coverage(float3 wsReal)
         float c = dot(d / max(dist, 1e-3), B / max(sharp, 1e-3));
         if (c <= 0) continue;
         float lobe = pow(c, sharp) * (0.65 + 0.7 * n);
-        float sr = 0;
-        if (distance(A.xyz, _ToyDoor.xyz) < 0.05) sr = _ToyDoor.w;
-        else [loop] for (int q = 0; q < 16; q++) { if (q >= cnt) break; if (distance(_ToySeeds[q].xyz, A.xyz) < 0.02) { sr = _ToySeeds[q].w; break; } }
+        float sr = _ToyBurstB[b].w;     // 来源半径由 CPU 算好（原来每个像素 × 每条舌头都去 16 个种子里找一遍，最多 192 次比较）
         float edge = sr + A.w * lobe - dist + (n - 0.5) * 2 * _NoiseAmp;
         cov = max(cov, smoothstep(-_EdgeWidth * 0.5, _EdgeWidth * 0.5, edge));
     }

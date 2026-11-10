@@ -46,7 +46,33 @@ namespace Bang
         static readonly Vector4[] BufA = new Vector4[MaxBursts], BufB = new Vector4[MaxBursts];
         float _burstMax;
 
-        void OnEnable() { Instance = this; Push(); }
+        void OnEnable() { Instance = this; EnsureNoise(); Push(); }
+
+        // 覆盖层噪声查找表（性能：见 ToyCover.hlsl vnoise）。64³ 单通道，每个格子存一个 0..1 的哈希值，三线性过滤、平铺；全局只建一次
+        const int NoiseN = 64;
+        static Texture3D s_noise;
+        static void EnsureNoise()
+        {
+            if (!s_noise)
+            {
+                var px = new byte[NoiseN * NoiseN * NoiseN];
+                for (int z = 0; z < NoiseN; z++) for (int y = 0; y < NoiseN; y++) for (int x = 0; x < NoiseN; x++)
+                    px[x + NoiseN * (y + NoiseN * z)] = (byte)Mathf.RoundToInt(Hash13(x, y, z) * 255f);
+                s_noise = new Texture3D(NoiseN, NoiseN, NoiseN, TextureFormat.R8, false)
+                    { name = "ToyNoise3D", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, hideFlags = HideFlags.DontSave };
+                s_noise.SetPixelData(px, 0); s_noise.Apply(false, true);   // 传到显卡后丢掉 CPU 副本
+            }
+            Shader.SetGlobalTexture("_ToyNoise3D", s_noise); Shader.SetGlobalFloat("_ToyNoiseN", NoiseN);
+        }
+        // 和着色器里 hash13 同一个公式（frac / dot），只是晶格取模 64
+        static float Hash13(float x, float y, float z)
+        {
+            x = Frac(x * 0.1031f); y = Frac(y * 0.1031f); z = Frac(z * 0.1031f);
+            float d = x * (z + 31.32f) + y * (y + 31.32f) + z * (x + 31.32f);
+            x += d; y += d; z += d;
+            return Frac((x + y) * z);
+        }
+        static float Frac(float v) => v - Mathf.Floor(v);
         void OnDisable() { if (Instance == this) Instance = null; Shader.SetGlobalFloat(IdCount, 0); Shader.SetGlobalVector(IdDoor, Vector4.zero); Shader.SetGlobalVector(IdEye, Vector4.zero); }
         void OnValidate() => Push();
 
@@ -199,7 +225,7 @@ namespace Bang
                     float u = Mathf.Clamp01(b.age / burstTime); u = 1f - (1f - u) * (1f - u) * (1f - u);   // 先快后慢地伸出去
                     float ext = Mathf.Max(0, b.reach - r) * u;
                     _burstMax = Mathf.Max(_burstMax, ext);
-                    BufA[nb] = new Vector4(o.x, o.y, o.z, ext); BufB[nb] = new Vector4(b.dir.x * b.sharp, b.dir.y * b.sharp, b.dir.z * b.sharp, 0); nb++;
+                    BufA[nb] = new Vector4(o.x, o.y, o.z, ext); BufB[nb] = new Vector4(b.dir.x * b.sharp, b.dir.y * b.sharp, b.dir.z * b.sharp, r); nb++;   // w = 来源（门口 / 种子）当前半径：着色器不用再逐像素去种子表里找
                 }
             for (int i = nb; i < MaxBursts; i++) { BufA[i] = Vector4.zero; BufB[i] = Vector4.zero; }
             Shader.SetGlobalVectorArray(IdBurstA, BufA); Shader.SetGlobalVectorArray(IdBurstB, BufB);

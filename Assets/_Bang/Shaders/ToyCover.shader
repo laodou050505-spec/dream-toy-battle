@@ -61,7 +61,11 @@ Shader "Bang/ToyCover"
                     half lit = saturate(dot(normalize(i.n), L.direction) * 0.5 + 0.5) * lerp(0.5, 1, L.shadowAttenuation);
                     return half4(_BaseColor.rgb * (0.55 + 0.5 * lit), 1 - cov);
                 }
-                return half4(0, 0, 0, cov);      // MR：Blend Zero One, Zero SrcAlpha → 颜色不变、alpha *= 覆盖度
+                // MR：原来覆盖度（本 Pass）和边缘光晕（Rim Pass）各算一遍 Coverage；真机改成一遍算完——
+                // 材质混合 Blend One One, Zero SrcAlpha：颜色 += 光晕，alpha *= 覆盖度；Rim Pass 在 MR 材质上关掉（SetShaderPassEnabled）
+                float band = exp(-pow((cov - 0.5) / 0.2, 2));
+                float spark = band > 0.01 ? smoothstep(0.82, 1.0, vnoise(i.ws * 38 + _Time.y * 0.6)) : 0;
+                return half4(_RimColor.rgb * band * (_RimStrength + spark * 0.6), cov);
             }
             ENDHLSL
         }
@@ -82,7 +86,7 @@ Shader "Bang/ToyCover"
             {
                 float cov = Coverage(i.ws);
                 float band = exp(-pow((cov - 0.5) / 0.2, 2));
-                float spark = smoothstep(0.82, 1.0, vnoise(i.ws * 38 + _Time.y * 0.6));
+                float spark = band > 0.01 ? smoothstep(0.82, 1.0, vnoise(i.ws * 38 + _Time.y * 0.6)) : 0;   // 光晕带以外不用算闪点
                 return half4(_RimColor.rgb * band * (_RimStrength + spark * 0.6), 0);
             }
             ENDHLSL
