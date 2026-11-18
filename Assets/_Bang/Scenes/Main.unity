@@ -186,6 +186,7 @@ MonoBehaviour:
   font: {fileID: 11400000, guid: 00e173d9bdbfc42748d5a8224c0d9609, type: 2}
   titleStage: {fileID: 81746785868673413, guid: 2dc4c4cba55684b1b9895471022732e6, type: 3}
   logoPrefab: {fileID: 919132149155446097, guid: 635b3a238da634822ab82f4d6685422d, type: 3}
+  brandLogo: {fileID: 2800000, guid: ca51643bfbba14cea93a7e0e4b05ebfd, type: 3}
   ribbon: {fileID: 2800000, guid: 61d72824f36904eb2ae9af3e61f044d8, type: 3}
   glow: {fileID: 2800000, guid: 6c41efe1b234a48689a7e4c8cf84a429, type: 3}
   icons:

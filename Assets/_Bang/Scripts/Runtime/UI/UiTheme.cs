@@ -15,6 +15,7 @@ namespace Bang.Play.UI
         public TMP_FontAsset font;
         public GameObject titleStage;            // 封面玩具小剧场（BangTitleStage 生成）
         public GameObject logoPrefab;
+        [Header("公司署名：官方 TRIPO 标志（白字版，用在深色底上；原图原样使用，不改色不拉伸）")] public Texture2D brandLogo;
         public Texture2D ribbon, glow;
         [Serializable] public struct Named { public string name; public Texture2D tex; }
         public Named[] icons, gestures;

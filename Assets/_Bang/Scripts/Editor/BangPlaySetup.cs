@@ -50,6 +50,26 @@ namespace Bang.EditorTools
             return fa;
         }
 
+        /// <summary>公司标志（官方 TRIPO 横版白字，用在深色底上）：原图不压缩、带多级渐远和三线性过滤（头显里缩小看不闪），不拉成 2 的幂。</summary>
+        public const string BrandLogoPath = "Assets/_Bang/Art/Brand/tripo_logo_h_800_white.png";
+        public static Texture2D BrandLogo()
+        {
+            var ti = AssetImporter.GetAtPath(BrandLogoPath) as TextureImporter;
+            if (ti == null) { Debug.LogWarning("[Bang] 缺少公司标志 " + BrandLogoPath); return null; }
+            if (ti.textureType != TextureImporterType.Default || !ti.mipmapEnabled || ti.textureCompression != TextureImporterCompression.Uncompressed || ti.npotScale != TextureImporterNPOTScale.None || !ti.alphaIsTransparency)
+            { ti.textureType = TextureImporterType.Default; ti.alphaIsTransparency = true; ti.mipmapEnabled = true; ti.filterMode = FilterMode.Trilinear; ti.anisoLevel = 8; ti.textureCompression = TextureImporterCompression.Uncompressed; ti.npotScale = TextureImporterNPOTScale.None; ti.wrapMode = TextureWrapMode.Clamp; ti.sRGBTexture = true; ti.SaveAndReimport(); }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(BrandLogoPath);
+        }
+
+        /// <summary>把公司标志填进当前场景的界面主题（不重新搭整个场景）。返回结果说明。</summary>
+        public static string ApplyBrand()
+        {
+            var th = Object.FindAnyObjectByType<Bang.Play.UI.UiTheme>(FindObjectsInactive.Include); var tex = BrandLogo();
+            if (!th || !tex) return "没找到界面主题或标志图";
+            if (th.brandLogo != tex) { th.brandLogo = tex; EditorUtility.SetDirty(th); UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(th.gameObject.scene); UnityEditor.SceneManagement.EditorSceneManager.SaveScene(th.gameObject.scene); }
+            return $"OK {th.gameObject.scene.path} brandLogo={th.brandLogo.name} {tex.width}x{tex.height} mips={tex.mipmapCount}";
+        }
+
         public static TMP_FontAsset Font()
         {
             var fa = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAsset);
@@ -190,6 +210,7 @@ namespace Bang.EditorTools
             th.logoPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Bang/Art/Models/Proc/UI/Logo3D.fbx");
             th.logoPrefabEn = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Bang/Art/Models/Proc/UI/Logo3D_EN.fbx");
             th.logoMatEn = BangArt.Mat("M_LogoCandy_EN", m => { m.SetTexture("_BaseMap", Tex(UiDir + "Logo_3D_EN.png", 2048)); m.renderQueue = 3090; }, Shader.Find("Bang/LogoCandy"));
+            th.brandLogo = BrandLogo();
             th.titleStage = BangTheater.Build(th.logoPrefab, th.logoMat, null);      // 封面：玩具小剧场（用户选定概念图 A）
             th.ribbon = Tex(UiDir + "Ribbon.png", 1024);
             var icons = new System.Collections.Generic.List<Bang.Play.UI.UiTheme.Named>();

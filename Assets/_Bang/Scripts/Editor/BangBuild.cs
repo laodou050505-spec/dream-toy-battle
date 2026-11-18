@@ -11,10 +11,40 @@ namespace Bang.EditorTools
 {
     public static class BangBuild
     {
+        /// <summary>启动画面（11-17 用户：去掉 Made with Unity，换成排版一样的 MADE WITH TRIPO —— 左边两行小号大写字 MADE / WITH，右边官方 TRIPO 标志）。
+        /// 仍然用 Unity 自带的启动画面（位置、大小、淡入淡出、深色背景都是同一套），只是关掉 Unity 标志、换成公司给的现成图（Art/Brand，原样使用）。
+        /// 头显（XR）里 Unity 不画“标志列表”，只认 Virtual Reality Splash Image 这一张贴图，所以两处都要填。每次打包自动执行；图不在就不改</summary>
+        public static string ApplySplash()
+        {
+            const string path = "Assets/_Bang/Art/Brand/made_with_tripo.png";          // 普通启动画面用：透明底
+            var ti = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (ti == null) { Debug.LogWarning("[Bang] 没找到启动画面图 " + path + "，启动画面保持原样"); return "缺图 " + path; }
+            if (ti.textureType != TextureImporterType.Sprite || ti.mipmapEnabled || ti.textureCompression != TextureImporterCompression.Uncompressed)
+            { ti.textureType = TextureImporterType.Sprite; ti.spriteImportMode = SpriteImportMode.Single; ti.mipmapEnabled = false; ti.textureCompression = TextureImporterCompression.Uncompressed; ti.alphaIsTransparency = true; ti.SaveAndReimport(); }
+            var sp = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (!sp) { Debug.LogWarning("[Bang] 启动画面图导入失败 " + path); return "导入失败 " + path; }
+            PlayerSettings.SplashScreen.show = true;
+            PlayerSettings.SplashScreen.showUnityLogo = false;
+            PlayerSettings.SplashScreen.logos = new[] { PlayerSettings.SplashScreenLogo.Create(2f, sp) };
+            const string vrPath = "Assets/_Bang/Art/Brand/made_with_tripo_vr.png";     // 头显用：不透明深色底、内容居中
+            var vi = AssetImporter.GetAtPath(vrPath) as TextureImporter;
+            if (vi == null) { Debug.LogWarning("[Bang] 没找到头显启动图 " + vrPath); return "缺图 " + vrPath; }
+            if (vi.textureType != TextureImporterType.Default || vi.mipmapEnabled || vi.textureCompression != TextureImporterCompression.Uncompressed || vi.npotScale != TextureImporterNPOTScale.None)
+            { vi.textureType = TextureImporterType.Default; vi.mipmapEnabled = false; vi.textureCompression = TextureImporterCompression.Uncompressed; vi.npotScale = TextureImporterNPOTScale.None; vi.wrapMode = TextureWrapMode.Clamp; vi.sRGBTexture = true; vi.SaveAndReimport(); }
+            var vt = AssetDatabase.LoadAssetAtPath<Texture2D>(vrPath);
+            var all = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset");
+            if (!vt || all == null || all.Length == 0) { Debug.LogWarning("[Bang] 头显启动图没设上"); return "头显启动图没设上"; }
+            var so = new SerializedObject(all[0]); var prop = so.FindProperty("m_VirtualRealitySplashScreen");
+            if (prop == null) { Debug.LogWarning("[Bang] 这个版本的 Unity 没有 m_VirtualRealitySplashScreen"); return "没有 m_VirtualRealitySplashScreen"; }
+            if (prop.objectReferenceValue != vt) { prop.objectReferenceValue = vt; so.ApplyModifiedPropertiesWithoutUndo(); AssetDatabase.SaveAssets(); }
+            return $"OK show={PlayerSettings.SplashScreen.show} unityLogo={PlayerSettings.SplashScreen.showUnityLogo} logos={PlayerSettings.SplashScreen.logos.Length}:{PlayerSettings.SplashScreen.logos[0].logo?.name} vr={(prop.objectReferenceValue ? prop.objectReferenceValue.name : "无")} {vt.width}x{vt.height}";
+        }
+
         /// <summary>一个包，游戏里设置页可切换中文 / English。</summary>
         [MenuItem("Bang/打包 APK（PICO）")]
         public static string BuildApk()
         {
+            ApplySplash();                                            // 启动画面：MADE WITH TRIPO（普通 + 头显两处）
             if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
             {
                 // 切平台后要重新编译，PICO SDK 的清单注入（PXR_Manifest，只在 UNITY_ANDROID 下编译）才会存在；

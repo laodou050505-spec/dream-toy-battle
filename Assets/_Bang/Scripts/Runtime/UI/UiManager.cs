@@ -197,11 +197,34 @@ namespace Bang.Play.UI
                     _stageBtns.Add(bb);
                 }
                 if (fresh) { fx.Init(driver.mousePrefab); LocalizeStage(st.transform); _practice = st.AddComponent<CoverPractice>(); _practice.Init(driver, theme, fx); }
+                if (fresh) BuildCredit(st.transform);
                 if (_practice) _practice.ShowSign(true);
             }
             else AddBtn(s, Loc.T("开始游戏", "Start"), new Vector3(0, -0.1f, -0.02f), new Vector2(0.5f, 0.115f), UiKit.BtnStyle.Primary, start, 0.046f);
             Hint(s, new Vector3(0, -0.62f, -0.2f));
             BangAudio.Ui("chapter_clear", 0.35f);
+        }
+
+        /// <summary>出品署名（11-17 用户）：舞台前沿正中钉一块小铭牌，像玩具剧场自带的厂牌 —— 官方 TRIPO 标志在前，“Tripo XR 出品 / Tripo XR Developers”在后。
+        /// 做法和台口按键同一套（深梅紫圆角板 + 封面正文字体），比按键小、没有碰撞体（不是按钮，打不中也点不了）；标志用原图，不改色、不拉伸、不加效果。
+        /// 切换语言时整座剧场会重建（RebuildForLanguage），文字跟着换；牌子宽度按文字实际宽度算，左右留白相等。
+        /// 节点名带 Plaque：封面描边（StickerOutline）按名字跳过它</summary>
+        void BuildCredit(Transform st)
+        {
+            var th = st.Find("Theater"); var tex = theme.brandLogo;
+            if (!th || !tex || th.Find("Plaque_Credit")) return;
+            const float PlateH = 0.07f, LogoH = 0.064f; float TextH = Loc.En ? 0.027f : 0.03f;   // 牌高 / 标志图高 / 字高（米）：按键高 0.105、按键字 0.046，署名比它们都小；英文字体更粗更宽，字号小一档
+            const float InsetX = 54f / 800f;                                           // 官方标志图左右自带的留白（占图宽的比例），对齐时按图里实际内容算
+            var root = UiKit.Node(th, "Plaque_Credit", new Vector3(0, 0.033f, -0.424f));   // 舞台木沿：本地 y 0～0.075、正前方 z = -0.40；牌子上边和金色台唇之间留一条木沿
+            var txt = UiKit.Text(root, Loc.T("Tripo XR 出品", "Tripo XR Developers"), TextH, new Color(1f, 0.97f, 0.91f), 1f, TextAlignmentOptions.CaplineLeft, 0f);
+            txt.enableWordWrapping = false; txt.rectTransform.pivot = new Vector2(0, 0.5f); txt.rectTransform.sizeDelta = new Vector2(1f, TextH * 3f);
+            txt.ForceMeshUpdate(); var tb = txt.textBounds;
+            float logoW = LogoH * tex.width / tex.height, logoIn = logoW * (1f - 2f * InsetX);
+            float pad = PlateH * 0.42f, gap = PlateH * 0.32f, inner = logoIn + gap + tb.size.x, x0 = -inner * 0.5f;
+            UiKit.ToonSlab(root, new Vector2(inner + pad * 2f, PlateH), UiKit.ToonInk, 0.06f, 0.004f, 0.004f);      // 板子做厚、往后插进木沿里：台沿是弧形的，薄板两头会悬空，侧面看要是实心的一块
+            var img = UiKit.Image(root, tex, LogoH); img.name = "Logo";
+            img.transform.localPosition = new Vector3(x0 - logoW * InsetX + logoW * 0.5f, 0, -0.002f);
+            txt.transform.localPosition = new Vector3(x0 + logoIn + gap - tb.min.x, 0, -0.003f);
         }
 
         /// <summary>英文版：封面舞台上预制体里印的中文换成英文（积木块上的“选关 / 设置”、招牌标题字换英文 3D 字、招牌下的英文小字去掉）。</summary>
